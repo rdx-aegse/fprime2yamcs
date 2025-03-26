@@ -22,14 +22,14 @@ from typing import Dict, Any
 
 def read_inputs(artifacts_dir: str, topology_dir:str) -> (str, str, str):
     """
-    Validates that the given directory contains required files and extracts MDB_NAME.
+    Validates that the given directory contains required files and extracts the deployment name.
     
     Parameters:
     artifacts_dir (str): Path to the fprime artifacts directory.
     topology_dir (str): Path to the fprime topology directory
     
     Returns:
-    Tuple[str, str, str]: Paths to TopologyDictionary.json and Packets.xml, and extracted MDB_NAME. None otherwise
+    Tuple[str, str, str]: Paths to TopologyDictionary.json and Packets.xml, and extracted deployment name. None otherwise
     
     Raises:
     FileNotFound if either topology or packets are not found
@@ -37,28 +37,28 @@ def read_inputs(artifacts_dir: str, topology_dir:str) -> (str, str, str):
     """
     topology_dict_file = None
     packets_file = None
-    mdb_name = None
+    depl_name = None
 
     # Check for required files in the directories
     for file_name in os.listdir(artifacts_dir):
         if file_name.endswith("TopologyDictionary.json"):
-            topology_dict_file = os.path.join(directory, file_name)
-            mdb_name_top = file_name.split("TopologyDictionary.json")[0]
+            topology_dict_file = os.path.join(artifacts_dir, file_name)
+            depl_name_top = file_name.split("TopologyDictionary.json")[0]
             
     for file_name in os.listdir(topology_dir):
         if file_name.endswith("Packets.xml"):
-            packets_file = os.path.join(directory, file_name)
-            mdb_name_pckts = file_name.split("Packets.xml")[0]
+            packets_file = os.path.join(topology_dir, file_name)
+            depl_name_pckts = file_name.split("Packets.xml")[0]
 
     if not topology_dict_file or not packets_file:
         raise FileNotFoundError(
-            f"The directory '{directory}' must contain both 'TopologyDictionary.json' and 'Packets.xml' files."
+            f"The directories '{artifacts_dir}' must contain both 'TopologyDictionary.json' and 'Packets.xml' files."
         )
         
-    if mdb_name_top != mdb_name_pckts:
+    if depl_name_top != depl_name_pckts:
         raise ValueError(f'{topology_dict_file} and {packets_file} should have the same base name (application name)')
     
-    return topology_dict_file, packets_file, mdb_name_top
+    return topology_dict_file, packets_file, depl_name_top
 
 def type_contains_array(type_name: str, types_decl: Dict[str, Any]) -> bool:
     """
@@ -71,46 +71,122 @@ def type_contains_array(type_name: str, types_decl: Dict[str, Any]) -> bool:
     Returns:
     bool: True if the type contains an array; False otherwise.
     """
-    type_info = types_decl[type_name]
+    #temp
+    print(f'Processing type_name {type_name}')
+    
+    #Arrays have to be in type declarations
+    if type_name in types_decl:
+        type_info = types_decl[type_name]
+        
+        if type_info["kind"] == "array":
+            return True  # Base case: if the type is an array, return True
 
-    if type_info["kind"] == "array":
-        return True  # Base case: if the type is an array, return True
-
-    if type_info["kind"] == "struct":
-        # Recursively check each member of the struct
-        return any(type_contains_array(member_type, types_decl) for member_type in type_info["members"].values())
+        if type_info["kind"] == "struct":
+            # Recursively check each member of the struct
+            return any(type_contains_array(member_type, types_decl) for member_type in type_info["members"].values())
 
     # For native types and enums as well as types not in the dictionary, return False
     return False
 
 def parse_args():
-    # Set up argparse
+    '''
+    Set up argparse for the script
+    '''    
     parser = argparse.ArgumentParser(
         description="Generate YAMCS mission database files based on Fprime artifacts."
     )
     
     parser.add_argument(
-        "fprime-artifacts",
+        "--fprime-artifacts",
+        required=True,
         help="Path to the fprime deployment artifacts directory containing [appName]TopologyDictionary.json."
     )
     
     parser.add_argument(
-        "fprime-topology",
+        "--fprime-topology",
+        required=True,
         help="Path to the fprime deployment topology directory containing [appName]Packets.xml."
     )
     
     parser.add_argument(
-        "yamcs-mdb",
+        "--yamcs-mdb",
+        required=True,
         help="Path to the YAMCS mission database directory where the output files will be saved."
     )
     
     parser.add_argument(
-        "mdb-version",
+        "--mdb-version",
         default="1.0",
         help="Version to show in the mission database (default: 1.0)."
     )
     
     return parser.parse_args()
+
+def remove_prefix_from_dict(d, prefix):
+    """
+    Removes a specified prefix from all keys and values in a dictionary, recursively.
+
+    Parameters:
+    - d (dict): The dictionary whose keys and values should be processed.
+    - prefix (str): The prefix to remove from the dictionary keys and values.
+
+    Returns:
+    - dict: A new dictionary with the prefix removed from keys and values.
+    """
+    # Create a new dictionary with modified keys and values
+    new_dict = {}
+    
+    for key, value in d.items():
+        # Use removeprefix to remove the prefix from the key
+        new_key = key.removeprefix(prefix)
+        
+        # Process the value (whether it's a string, dict, or list)
+        new_value = remove_prefix_from_value(value, prefix)
+        
+        new_dict[new_key] = new_value
+    
+    return new_dict
+
+def remove_prefix_from_list(lst, prefix):
+    """
+    Removes a specified prefix from all elements in a list, recursively.
+
+    Parameters:
+    - lst (list): The list whose elements should be processed.
+    - prefix (str): The prefix to remove from the list elements.
+
+    Returns:
+    - list: A new list with the prefix removed from string elements.
+    """
+    # Process each item in the list
+    return [remove_prefix_from_value(item, prefix) for item in lst]
+
+def remove_prefix_from_value(value, prefix):
+    """
+    Removes the specified prefix from a given value. Handles strings, dictionaries, and lists.
+
+    Parameters:
+    - value (any): The value to process. Can be a string, dictionary, or list.
+    - prefix (str): The prefix to remove from the value.
+
+    Returns:
+    - The modified value with the prefix removed (if applicable).
+    """
+    # If the value is a dictionary, process it recursively
+    if isinstance(value, dict):
+        return remove_prefix_from_dict(value, prefix)
+    
+    # If the value is a list, process it recursively
+    elif isinstance(value, list):
+        return remove_prefix_from_list(value, prefix)
+    
+    # If the value is a string, remove the prefix
+    elif isinstance(value, str):
+        return value.removeprefix(prefix)
+    
+    # Otherwise, leave the value unchanged (e.g., numbers, booleans, etc.)
+    else:
+        return value
 
 # --- Main Script ---------------------------------------------------------------------------------------------
 
@@ -123,8 +199,8 @@ if __name__ == "__main__":
     mdb_version = args.mdb_version
 
     try:
-        topology_dict_path, packets_xml_path, mdb_name = read_inputs(fprime_artifacts_dir, fprime_topology_dir)
-        print(f"Successfully read from fprime artifacts directory for Fprime application: {mdb_name}")
+        topology_dict_path, packets_xml_path, depl_name = read_inputs(fprime_artifacts_dir, fprime_topology_dir)
+        print(f"Successfully read from fprime artifacts directory for Fprime application: {depl_name}")
     except Exception as e:
         print(e)
         sys.exit(1)
@@ -132,13 +208,29 @@ if __name__ == "__main__":
     # Parse F' deployment dictionary
     dict_loader = DeploymentDictLoader(topology_dict_path)
     types_decl, channels_types, commands = dict_loader.parse()
+    
+    #channels types and commands have depl. prepended to their keys where depl is the deployment name; whereas the others don't. So strip it. 
+    channels_types = remove_prefix_from_dict(channels_types, depl_name+'.')
+    commands = remove_prefix_from_dict(commands, depl_name+'.')
+    
+    #temp
+    print('-----------types_decl-------------')
+    print(types_decl)
+    print('-----------channels_types--------------')
+    print(channels_types)
+    print('-------------commands-----------------')
+    print(commands)
 
     # Parse packets XML
     packets_loader = PacketsListLoader(packets_xml_path)
     packets = packets_loader.get_packets()
+    
+    #temp
+    print('-----------packets-------------')
+    print(packets)
 
     # Create YAMCS MDB generator
-    yamcs_gen = YAMCSMDBGen(mdb_name, mdb_version, output_dir)
+    yamcs_gen = YAMCSMDBGen(depl_name, mdb_version, output_dir)
 
     array_sizes = {}  # Memorize array sizes when processing types
 
@@ -195,4 +287,4 @@ if __name__ == "__main__":
     # Done building. Generate YAMCS MDB CSV files
     yamcs_gen.generateCSVs()
 
-    print(f"YAMCS mission database worksheets saved in {output_dir} with prefix '{mdb_name}'")
+    print(f"YAMCS mission database worksheets saved in {output_dir} with prefix '{depl_name}'")
