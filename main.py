@@ -20,12 +20,13 @@ from typing import Dict, Any
 
 # --- Helper Functions -----------------------------------------------------------------------------------------
 
-def read_inputs(directory: str) -> (str, str, str):
+def read_inputs(artifacts_dir: str, topology_dir:str) -> (str, str, str):
     """
     Validates that the given directory contains required files and extracts MDB_NAME.
     
     Parameters:
-    directory (str): Path to the fprime-artifacts directory.
+    artifacts_dir (str): Path to the fprime artifacts directory.
+    topology_dir (str): Path to the fprime topology directory
     
     Returns:
     Tuple[str, str, str]: Paths to TopologyDictionary.json and Packets.xml, and extracted MDB_NAME. None otherwise
@@ -38,12 +39,14 @@ def read_inputs(directory: str) -> (str, str, str):
     packets_file = None
     mdb_name = None
 
-    # Check for required files in the directory
-    for file_name in os.listdir(directory):
+    # Check for required files in the directories
+    for file_name in os.listdir(artifacts_dir):
         if file_name.endswith("TopologyDictionary.json"):
             topology_dict_file = os.path.join(directory, file_name)
             mdb_name_top = file_name.split("TopologyDictionary.json")[0]
-        elif file_name.endswith("Packets.xml"):
+            
+    for file_name in os.listdir(topology_dir):
+        if file_name.endswith("Packets.xml"):
             packets_file = os.path.join(directory, file_name)
             mdb_name_pckts = file_name.split("Packets.xml")[0]
 
@@ -88,7 +91,12 @@ def parse_args():
     
     parser.add_argument(
         "fprime-artifacts",
-        help="Path to the fprime deployment artifacts directory containing [appName]TopologyDictionary.json and [appName]Packets.xml."
+        help="Path to the fprime deployment artifacts directory containing [appName]TopologyDictionary.json."
+    )
+    
+    parser.add_argument(
+        "fprime-topology",
+        help="Path to the fprime deployment topology directory containing [appName]Packets.xml."
     )
     
     parser.add_argument(
@@ -97,7 +105,7 @@ def parse_args():
     )
     
     parser.add_argument(
-        "--mdb-version",
+        "mdb-version",
         default="1.0",
         help="Version to show in the mission database (default: 1.0)."
     )
@@ -110,11 +118,12 @@ if __name__ == "__main__":
     args = parse_args()
 
     fprime_artifacts_dir = args.fprime_artifacts
+    fprime_topology_dir = args.fprime_topology
     output_dir = args.yamcs_mdb
     mdb_version = args.mdb_version
 
     try:
-        topology_dict_path, packets_xml_path, mdb_name = read_inputs(fprime_artifacts_dir)
+        topology_dict_path, packets_xml_path, mdb_name = read_inputs(fprime_artifacts_dir, fprime_topology_dir)
         print(f"Successfully read from fprime artifacts directory for Fprime application: {mdb_name}")
     except Exception as e:
         print(e)
@@ -171,7 +180,6 @@ if __name__ == "__main__":
                     contains_array_arg = True
                     print(
                         f"Detected that type {arg_type} contains one or more array types. "
-                        f"Command '{cmd_name}' will be ignored because YAMCS does not support this."
                     )
                     break
                 command.addParam(arg_name, arg_type)
