@@ -37,6 +37,9 @@ def read_inputs(artifacts_dir: str, topology_dir:str) -> (str, str, str):
     """
     topology_dict_file = None
     packets_file = None
+    
+    if not os.path.isdir(artifacts_dir):
+        raise ValueError('Build artifacts directory does not exist. If entered correctly, it is possible Fprime failed to build.')
 
     # Check for required files in the directories
     for file_name in os.listdir(artifacts_dir):
