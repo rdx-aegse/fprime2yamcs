@@ -37,7 +37,6 @@ def read_inputs(artifacts_dir: str, topology_dir:str) -> (str, str, str):
     """
     topology_dict_file = None
     packets_file = None
-    depl_name = None
 
     # Check for required files in the directories
     for file_name in os.listdir(artifacts_dir):
@@ -212,22 +211,10 @@ if __name__ == "__main__":
     #channels types and commands have depl. prepended to their keys where depl is the deployment name; whereas the others don't. So strip it. 
     channels_types = remove_prefix_from_dict(channels_types, depl_name+'.')
     commands = remove_prefix_from_dict(commands, depl_name+'.')
-    
-    #temp
-    print('-----------types_decl-------------')
-    print(types_decl)
-    print('-----------channels_types--------------')
-    print(channels_types)
-    print('-------------commands-----------------')
-    print(commands)
 
     # Parse packets XML
     packets_loader = PacketsListLoader(packets_xml_path)
     packets = packets_loader.get_packets()
-    
-    #temp
-    print('-----------packets-------------')
-    print(packets)
 
     # Create YAMCS MDB generator
     yamcs_gen = YAMCSMDBGen(depl_name, mdb_version, output_dir)
