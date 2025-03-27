@@ -72,10 +72,7 @@ def type_contains_array(type_name: str, types_decl: Dict[str, Any]) -> bool:
     
     Returns:
     bool: True if the type contains an array; False otherwise.
-    """
-    #temp
-    print(f'Processing type_name {type_name}')
-    
+    """    
     #Arrays have to be in type declarations
     if type_name in types_decl:
         type_info = types_decl[type_name]
@@ -139,8 +136,8 @@ def remove_prefix_from_dict(d, prefix):
     new_dict = {}
     
     for key, value in d.items():
-        # Use removeprefix to remove the prefix from the key
-        new_key = key.removeprefix(prefix)
+        # Remove prefix from the key, use this instead of str.removeprefix because it already leaves non-str untouched
+        new_key = remove_prefix_from_value(key, prefix)
         
         # Process the value (whether it's a string, dict, or list)
         new_value = remove_prefix_from_value(value, prefix)
@@ -210,14 +207,17 @@ if __name__ == "__main__":
     # Parse F' deployment dictionary
     dict_loader = DeploymentDictLoader(topology_dict_path)
     types_decl, channels_types, commands = dict_loader.parse()
-    
-    #channels types and commands have depl. prepended to their keys where depl is the deployment name; whereas the others don't. So strip it. 
-    channels_types = remove_prefix_from_dict(channels_types, depl_name+'.')
-    commands = remove_prefix_from_dict(commands, depl_name+'.')
 
     # Parse packets XML
     packets_loader = PacketsListLoader(packets_xml_path)
     packets = packets_loader.get_packets()
+    
+    #Prepended deployment name adds clutter in YAMCS whereas the deployment is already a YAMCS instance so strip it. 
+    prefix = depl_name+'.'
+    types_decl = remove_prefix_from_dict(types_decl, prefix) #unnecessary actually
+    channels_types = remove_prefix_from_dict(channels_types, prefix)
+    commands = remove_prefix_from_dict(commands, prefix)
+    packets = remove_prefix_from_dict(packets, prefix)
 
     # Create YAMCS MDB generator
     yamcs_gen = YAMCSMDBGen(depl_name, mdb_version, output_dir)
@@ -227,37 +227,47 @@ if __name__ == "__main__":
     # Convert and add types; arrays and aggregates go last because they need basic types to be defined
     for type_name, type_info in types_decl.items():
         if type_info["kind"] == "enum":
+            print(f'Registering enum {type_name} ({type_info["representationtype"]}) with values {type_info["values"]}')
             yamcs_gen.addEnumType(type_name, type_info["representationtype"], type_info["values"])
         elif type_info["kind"] == "native":
+            print(f'Registering primitive type {type_name}')
             yamcs_gen.addPrimitiveType(type_name)
     
     for type_name, type_info in types_decl.items():
         if type_info["kind"] == "struct":
+            print(f'Registering aggregate type {type_name} with members {type_info["members"]}')
             yamcs_gen.addAggregateType(type_name, type_info["members"])
         elif type_info["kind"] == "array":
+            print(f'Registering array type {type_name} ({type_info["elementType"]}[{type_info["size"]}])')
             yamcs_gen.addArrayType(type_name, type_info["elementType"])
             array_sizes[type_name] = type_info["size"]
 
     # Add telemetry packets one by one from the list in the XML
     for packet_id, packet_info in packets.items():
+        print(f'Registering TM packet {packet_info["name"]} (ID {packet_id})')
         tm_packet = YAMCSMDBGen.TMPacket(packet_info["name"], packet_id)
 
         for channel_name in packet_info["channels"]:
             channel_type = channels_types.get(channel_name)
+            print(f'+--- Channel {channel_name} ({channel_type}', end=' ')
             if channel_type in array_sizes:
+                print(f'[{array_sizes[channel_type]}])')
                 tm_packet.addArray(channel_name, channel_type, array_sizes[channel_type])
             else:
+                print(')')
                 tm_packet.addParam(channel_name, channel_type)
 
         yamcs_gen.addTMTC(tm_packet)
 
     # Add commands one at a time
     for cmd_name, cmd_info in commands.items():
+        print(f'Registering command {cmd_name} (opcode {cmd_info["opcode"]})')
         command = YAMCSMDBGen.Command(cmd_name, cmd_info["opcode"])
         contains_array_arg = False
 
         for arg in cmd_info["args"]:
-            for arg_name, arg_type in arg.items():
+            for arg_name, arg_type in arg.items(): #Only one item in this dictionary, it felt cleaner than a pair at the time. TODO: reconsider this
+                print(f'+--- Argument {arg_name} ({arg_type})')
                 if type_contains_array(arg_type, types_decl):
                     contains_array_arg = True
                     print(
